@@ -2,44 +2,32 @@ import pandas as pd
 import plotly.express as px
 from dash import Dash, dcc, html, Input, Output
 
-# Test Data
-# df = pd.read_csv("tweets.csv")
-# df["name"] = pd.Series(df["name"]).str.lower()
-# df["date_time"] = pd.to_datetime(df["date_time"], dayfirst=True)
-# df = (
-#     df.groupby([df["date_time"].dt.date, "name"])[
-#         ["number_of_likes", "number_of_shares"]
-#     ]
-#     .mean()
-#     .astype(int)
-# )
-# df = df.reset_index()
-
-
-# ---- App Layout ----
+# ---- Style sheets ----
 stylesheets = ["./assets/main.css"]
 app = Dash(__name__, external_stylesheets=stylesheets)
 
+# ---- App Layout ----
 app.layout = html.Div([
+    
+    # ---- Header ----
     html.Div(
-        html.H1(
-            "Hello World - Row 1",
-            style={"textAlign":"center"}
-        ),
+        html.H1("PQT Lab Control"),
         className="row"
     ),
+
+    # ---- Wavemeter Measurement Page ----
     html.Div(
-        html.H1(
-            "Hello World - Row 2",
-            style={"textAlign":"center"}
-        ),
-        className="row"
-    ),
-    html.Div(
-        html.H1(
-            "Hello World - Row 3",
-            style={"textAlign":"center"}
-        ),
+        [
+            # Two columns:
+            # (1)  live feed area
+            # (2)  measurement settings area 
+            html.Div(
+                html.H1("2"), className="three columns"
+            ),
+            html.Div(
+                html.H1("1"), className="two columns"
+            )
+        ],
         className="row"
     )
 ])
