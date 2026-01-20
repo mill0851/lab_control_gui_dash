@@ -3,7 +3,7 @@ import plotly.express as px
 from dash import Dash, dcc, html, Input, Output
 
 # ---- Style sheets ----
-stylesheets = ["./css/main.css"]
+stylesheets = ["../css/main.css"]
 app = Dash(__name__, external_stylesheets=stylesheets)
 
 # ---- App Layout ----
