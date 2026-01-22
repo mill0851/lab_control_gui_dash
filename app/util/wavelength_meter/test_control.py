@@ -4,5 +4,5 @@ from time import sleep
 if __name__=="__main__":
 
     wlm = wlm.WLM(autostart=True)
-    sleep(60)
+    # sleep(60)
     wlm.close()
