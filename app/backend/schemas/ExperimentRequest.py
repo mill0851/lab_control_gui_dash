@@ -4,6 +4,6 @@ from typing import List, Optional
 
 
 class ExperimentRequest(BaseModel):
-    steps: List[Step] = []
+    steps: Optional[List[Step]] = None
     parallel_groups: Optional[List[List[Step]]] = None  # For simultaneous measurements
 

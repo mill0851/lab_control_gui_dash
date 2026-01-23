@@ -21,11 +21,8 @@ def list_devices():
 def submit_experiment(exp: ExperimentRequest):
 
     def job_func():
-        results = []
 
-        # Loop Through specified experimental steps first
-        # This area can be used for something like calibration
-        for step in exp.steps:
+        def run_step(step: Step):
             device = device_manager.get(step.device)
             device_methods = device.info()["capabilities"]
 
@@ -47,6 +44,42 @@ def submit_experiment(exp: ExperimentRequest):
 
             else:
                 raise HTTPException(status_code=400, detail="Specified methods unavailable - see device class")
+
+        results = []
+
+        # Loop Through specified experimental steps first
+        # This area can be used for something like calibration
+        if exp.steps:
+            for step in exp.steps:
+                device = device_manager.get(step.device)
+                device_methods = device.info()["capabilities"]
+
+                if step.action == "wait":
+                    time.sleep(step.duration)
+                    results.append({"waited": step.duration})
+
+                elif step.action in device_methods:
+                    if not device.acquire():
+                        raise HTTPException(status_code=409, detail=f"Device {step.device} busy")
+                    try:
+                        method = getattr(device, step.action)
+                        res = method(*step.args)
+                        results.append({"device": step.device, "result": res})
+                    except Exception as e:
+                        raise HTTPException(status_code=400, detail=str(e))
+                    finally:
+                        device.release()
+
+                else:
+                    raise HTTPException(status_code=400, detail="Specified methods unavailable - see device class")
+
+        # These are a list of parallel groups of steps
+        # for example say you have a function for a device that is to
+        # take along term measurement but you also want to take along term measurement elsewhere
+        # this way you can run both devices in parallel and wait for all results
+        if exp.parallel_groups:
+            for group in exp.parallel_groups:
+                threads = []
 
 
 
