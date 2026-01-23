@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from .schemas import ExperimentRequest, Step
 from .devices import DeviceManager, LabDevice, DummyScope
 from .jobs import JobRunner, Job
@@ -19,54 +19,66 @@ def list_devices():
 
 @app.post("/experiments")
 def submit_experiment(exp: ExperimentRequest):
+
     def job_func():
         results = []
-        # Sequential steps
+
+        # Loop Through specified experimental steps first
+        # This area can be used for something like calibration
         for step in exp.steps:
             device = device_manager.get(step.device)
             device_methods = device.info()["capabilities"]
+
             if step.action == "wait":
                 time.sleep(step.duration)
                 results.append({"waited": step.duration})
+
             elif step.action in device_methods:
                 if not device.acquire():
-                    raise RuntimeError(f"Device {step.device} busy")
+                    raise HTTPException(status_code=409, detail=f"Device {step.device} busy")
                 try:
                     method = getattr(device, step.action)
                     res = method(*step.args)
                     results.append({"device": step.device, "result": res})
+                except Exception as e:
+                    raise HTTPException(status_code=400, detail=str(e))
                 finally:
                     device.release()
 
-        # Parallel steps
-        if exp.parallel_groups:
-            for group in exp.parallel_groups:
-                threads = []
-                group_results = [None]*len(group)
+            else:
+                raise HTTPException(status_code=400, detail="Specified methods unavailable - see device class")
 
-                # Creates a thread to run each 
-                def make_thread(i, step):
-                    def thread_func():
-                        device = device_manager.get(step.device)
-                        if not device.acquire():
-                            raise RuntimeError(f"Device {step.device} busy")
-                        try:
-                            group_results[i] = {"device": step.device,
-                                                "result": device.measure(step.duration)}
-                        finally:
-                            device.release()
-                    return Thread(target=thread_func)
-                
-                for i, step in enumerate(group):
-                    t = make_thread(i, step)
-                    threads.append(t)
-                    t.start()
-                for t in threads:
-                    t.join()
-                results.extend(group_results)
-        return results
-    job = job_runner.submit(job_func)
-    return {"job_id": job.id}
+
+
+    #     # Parallel steps
+    #         if exp.parallel_groups:
+    #             for group in exp.parallel_groups:
+    #                 threads = []
+    #                 group_results = [None]*len(group)
+    #
+    #             # Creates a thread to run each
+    #             def make_thread(i, step):
+    #                 def thread_func():
+    #                     device = device_manager.get(step.device)
+    #                     if not device.acquire():
+    #                         raise RuntimeError(f"Device {step.device} busy")
+    #                     try:
+    #                         group_results[i] = {"device": step.device,
+    #                                             "result": device.measure(step.duration)}
+    #                     finally:
+    #                         device.release()
+    #                 return Thread(target=thread_func)
+    #
+    #             for i, step in enumerate(group):
+    #                 t = make_thread(i, step)
+    #                 threads.append(t)
+    #                 t.start()
+    #             for t in threads:
+    #                 t.join()
+    #             results.extend(group_results)
+    #     return results
+    # job = job_runner.submit(job_func)
+    # return {"job_id": job.id}
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):

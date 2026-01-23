@@ -41,4 +41,3 @@ class DummyScope(LabDevice):
             time.sleep(0.0005)
         
         return {"voltage": data, "time": t}
-
