@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
-import sys
-import time
+# import sys
+# import time
 from threading import Lock, Thread
 
-class Device(ABC):
+class LabDevice(ABC):
     def __init__(self, device_id: str):
         self.device_id = device_id
         self.lock = Lock()
