@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from .schemas import ExperimentRequest, Step
 from .devices import DeviceManager, LabDevice, DummyScope
 from .jobs import JobRunner, Job
-from threading import Thread
+from threading import Thread, Barrier
 import time
 
 
@@ -22,8 +22,11 @@ def submit_experiment(exp: ExperimentRequest):
 
     def job_func():
 
-        def run_step(step: Step):
-            device = device_manager.get(step.device)
+        def run_step(step: Step, results: list = []):
+            try:
+                device = device_manager.get(step)
+            except KeyError as e:
+                 raise HTTPException(status_code=404, detail="Requested device doesnt exist")
             device_methods = device.info()["capabilities"]
 
             if step.action == "wait":
@@ -43,75 +46,58 @@ def submit_experiment(exp: ExperimentRequest):
                     device.release()
 
             else:
-                raise HTTPException(status_code=400, detail="Specified methods unavailable - see device class")
+                raise HTTPException(status_code=400, detail="Specified methods unavailable - see device class")              
 
-        results = []
-
-        # Loop Through specified experimental steps first
-        # This area can be used for something like calibration
-        if exp.steps:
-            for step in exp.steps:
-                device = device_manager.get(step.device)
-                device_methods = device.info()["capabilities"]
-
-                if step.action == "wait":
-                    time.sleep(step.duration)
-                    results.append({"waited": step.duration})
-
-                elif step.action in device_methods:
-                    if not device.acquire():
-                        raise HTTPException(status_code=409, detail=f"Device {step.device} busy")
-                    try:
-                        method = getattr(device, step.action)
-                        res = method(*step.args)
-                        results.append({"device": step.device, "result": res})
-                    except Exception as e:
-                        raise HTTPException(status_code=400, detail=str(e))
-                    finally:
-                        device.release()
-
-                else:
-                    raise HTTPException(status_code=400, detail="Specified methods unavailable - see device class")
-
-        # These are a list of parallel groups of steps
-        # for example say you have a function for a device that is to
-        # take along term measurement but you also want to take along term measurement elsewhere
-        # this way you can run both devices in parallel and wait for all results
         if exp.parallel_groups:
-            for group in exp.parallel_groups:
+
+            #  CHECK FOR UNVALID TYPE  
+            if exp.parallel_type not in ("sequential", "simultaneous"):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Parallel type must be sequential or simultaneous"
+                )
+            
+            all_results = []
+
+            #  SEQUENTIAL GROUPS (ONE AFTER ANOTHER)
+            if exp.parallel_type == "sequential":
+                for group in exp.parellel_groups:
+                    group_results = []
+                    for step in group:
+                        run_step(step, group_results)
+                    all_results.append(group_results)
+                        
+            #  SIMULTANEOUS GROUPS (ALL RUN IN PARALLEL)
+            else:
                 threads = []
+                group_results = [None]*len(exp.parallel_groups)
+                start_barrier = Barrier(len(exp.parallel_groups))
+                
+                def run_group(idx: int, steps: list):
+                    start_barrier.wait()
+                    local_results = []
+                    for step in steps:
+                        run_step(step, local_results)
+                    group_results[idx] = local_results
 
+                for i, group in enumerate(exp.parallel_groups):
+                    t = Thread(
+                        target=run_group,
+                        args=(i, group),
+                        daemon=True
+                    )
+                    threads.append(t)
+                    t.start()
 
+                for t in threads:
+                    t.join()
 
-    #     # Parallel steps
-    #         if exp.parallel_groups:
-    #             for group in exp.parallel_groups:
-    #                 threads = []
-    #                 group_results = [None]*len(group)
-    #
-    #             # Creates a thread to run each
-    #             def make_thread(i, step):
-    #                 def thread_func():
-    #                     device = device_manager.get(step.device)
-    #                     if not device.acquire():
-    #                         raise RuntimeError(f"Device {step.device} busy")
-    #                     try:
-    #                         group_results[i] = {"device": step.device,
-    #                                             "result": device.measure(step.duration)}
-    #                     finally:
-    #                         device.release()
-    #                 return Thread(target=thread_func)
-    #
-    #             for i, step in enumerate(group):
-    #                 t = make_thread(i, step)
-    #                 threads.append(t)
-    #                 t.start()
-    #             for t in threads:
-    #                 t.join()
-    #             results.extend(group_results)
-    #     return results
-    # job = job_runner.submit(job_func)
-    # return {"job_id": job.id}
+                all_results = group_results
+
+        return  all_results
+
+    job = job_runner.submit(job_func)
+    return {"job_id": job.id}
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str):
