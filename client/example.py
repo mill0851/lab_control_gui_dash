@@ -1,34 +1,57 @@
 import asyncio
-from LabClient import LabClient       # your client class
-from DeviceProxy import DeviceProxy   # proxy class
-from Experiment import Experiment      # async context manager
+from LabClient import LabClient
+from DeviceProxy import DeviceProxy 
+from Experiment import Experiment
+import numpy as np
 
 
 async def main():
 
-    # Establish connection to lab computer
+    # ---- ESTABLISH CONNECTION TO SERVER ----
     client = LabClient("ws://localhost:8000/ws")
     await client.connect()
 
-    # This is where your experimental logic goes
+    # ---- EXPERIMENT ----
     async with Experiment(client) as exp:
 
-        # Reserve which devices you will use and how long (device_name, durations_s=duration)
-        await exp.reserve("cam1", duration_s=300)
-        await exp.reserve("cam2", duration_s=300)
+        # ---- RESERVE AND INSTANTIATE DEVICES ----
+        duration = 3000
+        await exp.reserve("DummySpectrometer", duration_s=duration)
+        await exp.reserve("DummyStage", duration_s=duration)
+        await exp.reserve("DummyVoltage", duration_s=duration)
+        spectro = DeviceProxy(client, "DummySpectrometer")
+        stage = DeviceProxy(client, "DummyStage")
+        voltage_supply = DeviceProxy(client, "DummyVoltage")
 
-        # Instantiate the devices you want (LabClient, device_name)
-        cam1 = DeviceProxy(client, "cam1")
-        cam2 = DeviceProxy(client, "cam2")
+        # ---- HELPER FUNCTIONS ----
+        async def pl_measurement(voltage_supply, spectrometer, volt_range=(-1.0, 1.0), step=0.25):
+            voltages = np.arange(volt_range[0], volt_range[1]+(step/10), step)
+            result = []
 
-        # Experimental logic
-        img1 = await cam1.capture()
-        img2 = await cam2.capture()
+            for voltage in voltages:
+                voltage_supply.set_voltage(voltage)
+                data_slice = await spectrometer.capture(exposure=10)
+                result.append(data_slice)
 
-        # Display results
-        print(img1)
-        print(img2)
+            return result
+
+        # ---- EXPERIMENT LOGIC ----
+        # Imagine moving across a grid and taking a PL measurement at each spot
+        coordinates = [
+            (0,0), (1,0), (2,0),
+            (0,1), (1,1), (2,1),
+            (0,2), (1,2), (2,2)
+        ]
+
+        pl_measurements = []
+
+        for coord in coordinates:
+            await stage.move(position=coord)
+            pl = await pl_measurement(voltage_supply, spectro, volt_range=(-1.5,1.5), step=0.1)
+            pl_measurements.append(pl)
+
+    return pl_measurements
 
 
 # Start Experiment
-asyncio.run(main())
+data = asyncio.run(main())
