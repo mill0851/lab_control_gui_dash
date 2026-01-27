@@ -5,7 +5,6 @@ from .jobs import JobRunner, Job
 from threading import Thread, Barrier
 import time
 
-
 device_manager = DeviceManager()
 device_manager.register(DummyScope("scope1"))
 device_manager.register(DummyScope("scope2"))
@@ -18,7 +17,21 @@ def list_devices():
     return device_manager.list_devices()
 
 @app.post("/experiments")
-def submit_experiment(exp: ExperimentRequest):
+def submit_experiment(exp: ExperimentRequest) -> list:
+    """
+    The architecture here is for you to submit an "ExperimentRequest". The experiment request is given to a "Job"
+    that takes a custom handling function as an argument. The custom handling function should handle errors with
+    HTTPException with the proper status_code. Once the job is created the "JobRunner" executes the measurement process
+    on the host computer. This JobRunner interacts with the "DeviceManager" to gain device access and permissions. Once
+    access is acquired the code executes and data is passed upstream.
+
+    :param exp: ExperimentRequest Object - see schemas
+    :return: Returns a list of experimental results based on the "parallel_type" submitted
+    If "Sequential" each list of Step objects is run sequentially producing a single array.
+    If "Simultaneous" each list of Step objects is run simultaneously using threads. This returns
+    a list of lists. the inner lists contain the results for each step. The return is indexed the
+    same as the input.
+    """
 
     def job_func():
 
@@ -50,7 +63,7 @@ def submit_experiment(exp: ExperimentRequest):
 
         if exp.parallel_groups:
 
-            #  CHECK FOR UNVALID TYPE  
+            #  CHECK FOR INVALID TYPE
             if exp.parallel_type not in ("sequential", "simultaneous"):
                 raise HTTPException(
                     status_code=400,

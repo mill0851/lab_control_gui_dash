@@ -30,7 +30,7 @@ class DummyScope(LabDevice):
     def set_channel(self, channel: int = 1) -> dict:
         self.channel = channel
 
-    def volt_longterm(self, channel, duration) -> dict:
+    def volt_longterm(self, channel, duration, interval) -> dict:
         t = []
         data = []
         start = time.time()
@@ -38,6 +38,6 @@ class DummyScope(LabDevice):
         while time.time() - start < duration:
             t.append(time.time())
             data.append(np.sin(2*np.pi*(1/0.01)*t))
-            time.sleep(0.0005)
+            time.sleep(interval)
         
         return {"voltage": data, "time": t}
